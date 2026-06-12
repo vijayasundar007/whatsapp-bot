@@ -1,8 +1,11 @@
 require("dotenv").config();
-const express = require("express");
-const axios = require("axios");
+
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
 const ACCESS_TOKEN = process.env.ACCESS_TOKEN;
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
+const express = require("express");
+const axios = require("axios");
+
 
 const app = express();
 app.use(express.json());
