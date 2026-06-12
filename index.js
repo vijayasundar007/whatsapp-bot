@@ -17,24 +17,17 @@ async function getAIReply(text) {
             },
             {
                 headers: {
-                    Authorization: `Bearer ${process.env.HF_API_KEY || ""}`
+                    Authorization: `Bearer ${process.env.HF_API_KEY}`
                 }
             }
         );
 
-        // fallback safe parsing
-        const reply =
-            response.data?.[0]?.generated_text ||
-            response.data?.generated_text ||
-            "Sorry, I couldn't respond.";
-
-        return reply;
+        return response.data.generated_text || "No response";
     } catch (err) {
         console.log("AI ERROR:", err.message);
         return "AI is currently unavailable.";
     }
 }
-
 /* =========================
    LOG MIDDLEWARE
 ========================= */
@@ -88,7 +81,7 @@ app.post("/webhook", async (req, res) => {
             const reply = await getAIReply(text);
 
             await axios.post(
-                `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
+                `https://api-inference.huggingface.co/models/microsoft/DialoGPT-medium`,
                 {
                     messaging_product: "whatsapp",
                     to: from,
