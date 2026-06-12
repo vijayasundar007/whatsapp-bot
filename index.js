@@ -80,35 +80,36 @@ app.get("/webhook", (req, res) => {
 app.post("/webhook", async (req, res) => {
     try {
 
-        console.log("🔥 REQUEST:", req.method, req.url);
+        const value = req.body.entry?.[0]?.changes?.[0]?.value;
 
-        const msg =
-            req.body.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
+        const msg = value?.messages?.[0];
 
-        // STEP 1 SAFE CHECK
-        if (!msg || !msg.id || !msg.from) {
+        // 🔴 ONLY PROCESS REAL MESSAGES
+        if (!msg || !msg.from || !msg.text?.body) {
             return res.sendStatus(200);
         }
+
+        const msgId = msg.id || msg.timestamp + msg.from;
 
         if (!global.processedMessages) {
             global.processedMessages = new Set();
         }
 
-        if (global.processedMessages.has(msg.id)) {
+        if (global.processedMessages.has(msgId)) {
             return res.sendStatus(200);
         }
 
-        global.processedMessages.add(msg.id);
+        global.processedMessages.add(msgId);
 
         const from = msg.from;
-        const text = msg.text?.body;
+        const text = msg.text.body;
 
-        if (!text) return res.sendStatus(200);
-
-        // AI CALL
         const reply = await getAIReply(text);
 
-        // SEND MESSAGE TO WHATSAPP
+        if (!reply || reply.trim() === "") {
+            return res.sendStatus(200);
+        }
+
         await axios.post(
             `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
             {
@@ -129,7 +130,7 @@ app.post("/webhook", async (req, res) => {
         res.sendStatus(200);
 
     } catch (err) {
-        console.log("🔥 WEBHOOK ERROR:", err.message);
+        console.log("🔥 WEBHOOK ERROR:", err.response?.data || err.message);
         res.sendStatus(200);
     }
 });
