@@ -96,6 +96,28 @@ app.post("/webhook", async (req, res) => {
         const value = req.body.entry?.[0]?.changes?.[0]?.value;
 
         const msg = value?.messages?.[0];
+        if (msg?.type === "image") {
+
+    await axios.post(
+        `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
+        {
+            messaging_product: "whatsapp",
+            to: msg.from,
+            text: {
+                body: "📷 I received your image."
+            }
+        },
+        {
+            headers: {
+                Authorization: `Bearer ${ACCESS_TOKEN}`,
+                "Content-Type": "application/json"
+            }
+        }
+    );
+
+    return res.sendStatus(200);
+}
+
 
         // 🔴 ONLY PROCESS REAL MESSAGES
         if (!msg || !msg.from || !msg.text?.body) {
