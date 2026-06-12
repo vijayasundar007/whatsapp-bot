@@ -57,6 +57,19 @@ app.get("/", (req, res) => {
 ========================= */
 const VERIFY_TOKEN = "my_verify_token";
 
+async function getImageUrl(query) {
+    const response = await axios.get(
+        `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=1`,
+        {
+            headers: {
+                Authorization: process.env.PEXELS_API_KEY
+            }
+        }
+    );
+
+    return response.data.photos?.[0]?.src?.large;
+}
+
 
 
 /* =========================
@@ -103,6 +116,39 @@ app.post("/webhook", async (req, res) => {
 
         const from = msg.from;
         const text = msg.text.body;
+        const lowerText = text.toLowerCase();
+
+if (
+    lowerText.includes("image") ||
+    lowerText.includes("photo") ||
+    lowerText.includes("picture")
+) {
+
+    const imageUrl = await getImageUrl(text);
+
+    if (imageUrl) {
+
+        await axios.post(
+            `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
+            {
+                messaging_product: "whatsapp",
+                to: from,
+                type: "image",
+                image: {
+                    link: imageUrl
+                }
+            },
+            {
+                headers: {
+                    Authorization: `Bearer ${ACCESS_TOKEN}`,
+                    "Content-Type": "application/json"
+                }
+            }
+        );
+
+        return res.sendStatus(200);
+    }
+}
 
         const reply = await getAIReply(text);
 
