@@ -10,7 +10,7 @@ app.use(express.json());
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 const model = genAI.getGenerativeModel({
-    model: "gemini-2.5-flash"
+    model: "gemini-1.5-flash"
 });
 
 
@@ -53,42 +53,43 @@ app.post("/webhook", async (req, res) => {
         const text = msg.text?.body;
 
         try {
-            const result = await model.generateContent(text);
-            const reply = result.response.text();
+    const result = await model.generateContent(text);
+    const response = await result.response;
+    const reply = response.text();
 
-            await axios.post(
-                `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
-                {
-                    messaging_product: "whatsapp",
-                    to: from,
-                    text: { body: reply }
-                },
-                {
-                    headers: {
-                        Authorization: `Bearer ${ACCESS_TOKEN}`,
-                        "Content-Type": "application/json"
-                    }
-                }
-            );
-
-        } catch (err) {
-            console.log("Gemini Error:", err.message);
-
-            await axios.post(
-                `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
-                {
-                    messaging_product: "whatsapp",
-                    to: from,
-                    text: { body: "Sorry, AI is not responding right now." }
-                },
-                {
-                    headers: {
-                        Authorization: `Bearer ${ACCESS_TOKEN}`,
-                        "Content-Type": "application/json"
-                    }
-                }
-            );
+    await axios.post(
+        `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
+        {
+            messaging_product: "whatsapp",
+            to: from,
+            text: { body: reply }
+        },
+        {
+            headers: {
+                Authorization: `Bearer ${ACCESS_TOKEN}`,
+                "Content-Type": "application/json"
+            }
         }
+    );
+
+} catch (err) {
+    console.log("Gemini Error:", err.message);
+
+    await axios.post(
+        `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
+        {
+            messaging_product: "whatsapp",
+            to: from,
+            text: { body: "AI error. Please try again." }
+        },
+        {
+            headers: {
+                Authorization: `Bearer ${ACCESS_TOKEN}`,
+                "Content-Type": "application/json"
+            }
+        }
+    );
+}
     }
 
     res.sendStatus(200);
