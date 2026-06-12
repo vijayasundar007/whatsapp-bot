@@ -18,7 +18,7 @@ async function getAIReply(text) {
         const response = await axios.post(
             "https://openrouter.ai/api/v1/chat/completions",
             {
-                model: "mistralai/mistral-7b-instruct",
+                model: "openai/gpt-3.5-turbo",   // ✅ SAFE MODEL
                 messages: [
                     { role: "user", content: text }
                 ]
@@ -33,7 +33,7 @@ async function getAIReply(text) {
 
         return response.data.choices[0].message.content;
     } catch (err) {
-        console.log("AI ERROR:", err.message);
+        console.log("AI ERROR:", err.response?.data || err.message);
         return "AI is currently unavailable.";
     }
 }
