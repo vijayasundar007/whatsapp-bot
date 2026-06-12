@@ -98,19 +98,19 @@ app.post("/webhook", async (req, res) => {
         const reply = await getAIReply(text);
 
         await axios.post(
-            `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
-            {
-                messaging_product: "whatsapp",
-                to: from,
-                text: { body: reply }
-            },
-            {
-                headers: {
-                    Authorization: `Bearer ${ACCESS_TOKEN}`,
-                    "Content-Type": "application/json"
-                }
-            }
-        );
+  `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
+  {
+    messaging_product: "whatsapp",
+    to: from,
+    text: { body: reply }
+  },
+  {
+    headers: {
+      Authorization: `Bearer ${ACCESS_TOKEN}`,
+      "Content-Type": "application/json"
+    }
+  }
+);
 
         res.sendStatus(200);
 
