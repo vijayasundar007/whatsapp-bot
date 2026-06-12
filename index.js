@@ -11,7 +11,6 @@ app.use(express.json());
 async function getAIReply(text) {
     try {
         const response = await axios.post(
-    `https://api-inference.huggingface.co/models/microsoft/DialoGPT-medium`,
     {
         messaging_product: "whatsapp",
         to: from,
