@@ -79,34 +79,43 @@ app.get("/webhook", (req, res) => {
 ========================= */
 app.post("/webhook", async (req, res) => {
     try {
-        const msg = req.body.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
+        const entry = req.body.entry?.[0];
+        const changes = entry?.changes?.[0];
+        const value = changes?.value;
 
-        if (!msg) return res.sendStatus(200);
+        const msg = value?.messages?.[0];
 
-        const from = msg.from;
+        if (!msg) {
+            return res.sendStatus(200);
+        }
+
+        const from = msg.from;   // 👈 RECEIVER (user who sent message)
         const text = msg.text?.body;
+
+        console.log("FROM USER:", from);
+        console.log("TEXT:", text);
 
         const reply = await getAIReply(text);
 
         await axios.post(
-    `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
-    {
-        messaging_product: "whatsapp",
-        to: from,
-        text: { body: reply }
-    },
-    {
-        headers: {
-            Authorization: `Bearer ${ACCESS_TOKEN}`,
-            "Content-Type": "application/json"
-        }
-    }
-);
+            `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
+            {
+                messaging_product: "whatsapp",
+                to: from,
+                text: { body: reply }
+            },
+            {
+                headers: {
+                    Authorization: `Bearer ${ACCESS_TOKEN}`,
+                    "Content-Type": "application/json"
+                }
+            }
+        );
 
         res.sendStatus(200);
 
     } catch (err) {
-        console.log("🔥 BOT ERROR:", err.message);
+        console.log("WEBHOOK ERROR:", err.message);
         res.sendStatus(200);
     }
 });
