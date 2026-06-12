@@ -54,8 +54,8 @@ app.get("/", (req, res) => {
    WHATSAPP CONFIG
 ========================= */
 const VERIFY_TOKEN = "my_verify_token";
-const ACCESS_TOKEN = "EAAfCHL8qDZBEBRlZClRJ7bAasZCDo8QHGuYIvEC4bvnZA8sD4KaZAiafTp7WrQzWSrn6aJb9QEQxTqiOADHjlDw21U6ogfdtsXxDbQpw5TJEvz8KfJLXglat0E6JqintujbYboUvrvRZARIZBpvZCZC2YTQZAVp8Kwbg70qnDiUmZA5lAOl4ZA8tE32cDWZAsyVBA2wZDZD";
-const PHONE_NUMBER_ID = "1149930188205694";
+
+
 
 /* =========================
    WEBHOOK VERIFY
