@@ -10,7 +10,7 @@ app.use(express.json());
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 const model = genAI.getGenerativeModel({
-    model: "gemini-1.5-flash"
+    model: "models/gemini-1.5-flash"
 });
 
 
@@ -53,7 +53,14 @@ app.post("/webhook", async (req, res) => {
         const text = msg.text?.body;
 
         try {
-    const result = await model.generateContent(text);
+    const result = await model.generateContent({
+    contents: [
+        {
+            role: "user",
+            parts: [{ text: text }]
+        }
+    ]
+});
     const response = await result.response;
     const reply = response.text();
 
