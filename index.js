@@ -16,11 +16,13 @@ app.use(express.json());
 async function getAIReply(text) {
     try {
         const response = await axios.post(
-    {
-        messaging_product: "whatsapp",
-        to: from,
-        text: { body: reply }
-    },
+            "https://openrouter.ai/api/v1/chat/completions",
+            {
+                model: "mistralai/mistral-7b-instruct",
+                messages: [
+                    { role: "user", content: text }
+                ]
+            },
             {
                 headers: {
                     Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
@@ -87,19 +89,19 @@ app.post("/webhook", async (req, res) => {
         const reply = await getAIReply(text);
 
         await axios.post(
-            `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
-            {
-                messaging_product: "whatsapp",
-                to: from,
-                text: { body: reply }
-            },
-            {
-                headers: {
-                    Authorization: `Bearer ${ACCESS_TOKEN}`,
-                    "Content-Type": "application/json"
-                }
-            }
-        );
+    `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
+    {
+        messaging_product: "whatsapp",
+        to: from,
+        text: { body: reply }
+    },
+    {
+        headers: {
+            Authorization: `Bearer ${ACCESS_TOKEN}`,
+            "Content-Type": "application/json"
+        }
+    }
+);
 
         res.sendStatus(200);
 
