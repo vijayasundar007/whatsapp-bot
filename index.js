@@ -79,52 +79,60 @@ app.get("/webhook", (req, res) => {
 ========================= */
 app.post("/webhook", async (req, res) => {
     try {
-        const entry = req.body.entry?.[0];
-        const changes = entry?.changes?.[0];
-        const value = changes?.value;
 
-        const msg = value?.messages?.[0];
-        let processedMessages = new Set();
+        console.log("🔥 REQUEST:", req.method, req.url);
 
-if (processedMessages.has(msg.id)) return;
-processedMessages.add(msg.id);
+        const msg =
+            req.body.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
 
-        if (!msg) {
+        // STEP 1 SAFE CHECK
+        if (!msg || !msg.id || !msg.from) {
             return res.sendStatus(200);
         }
 
-        const from = msg.from;   // 👈 RECEIVER (user who sent message)
+        if (!global.processedMessages) {
+            global.processedMessages = new Set();
+        }
+
+        if (global.processedMessages.has(msg.id)) {
+            return res.sendStatus(200);
+        }
+
+        global.processedMessages.add(msg.id);
+
+        const from = msg.from;
         const text = msg.text?.body;
 
-        console.log("FROM USER:", from);
-        console.log("TEXT:", text);
+        if (!text) return res.sendStatus(200);
 
+        // AI CALL
         const reply = await getAIReply(text);
-        if (!reply) reply = "Sorry, I didn't understand.";
 
+        // SEND MESSAGE TO WHATSAPP
         await axios.post(
-  `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
-  {
-    messaging_product: "whatsapp",
-    to: from,
-    text: { body: reply }
-  },
-  {
-    headers: {
-      Authorization: `Bearer ${ACCESS_TOKEN}`,
-      "Content-Type": "application/json"
-    }
-  }
-);
+            `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
+            {
+                messaging_product: "whatsapp",
+                to: from,
+                text: { body: reply }
+            },
+            {
+                headers: {
+                    Authorization: `Bearer ${ACCESS_TOKEN}`,
+                    "Content-Type": "application/json"
+                }
+            }
+        );
+
+        console.log("✅ REPLY SENT");
 
         res.sendStatus(200);
 
     } catch (err) {
-        console.log("WEBHOOK ERROR:", err.message);
+        console.log("🔥 WEBHOOK ERROR:", err.message);
         res.sendStatus(200);
     }
 });
-
 /* =========================
    START SERVER
 ========================= */
