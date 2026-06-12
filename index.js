@@ -97,7 +97,8 @@ app.post("/webhook", async (req, res) => {
 
         const msg = value?.messages?.[0];
         if (msg?.type === "image") {
-            console.log("IMAGE DATA:", JSON.stringify(msg.image, null, 2));
+             console.log("📷 IMAGE MESSAGE RECEIVED");
+    console.log("FULL MSG:", JSON.stringify(msg, null, 2));
 
     await axios.post(
         `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
