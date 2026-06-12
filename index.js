@@ -2,15 +2,28 @@ require("dotenv").config();
 const express = require("express");
 const axios = require("axios");
 
-const { GoogleGenerativeAI } = require("@google/generative-ai");
+
 const app = express();
 app.use(express.json());
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-const model = genAI.getGenerativeModel({
-    model: "/gemini-1.5-flash"
-});
+async function getGeminiReply(text) {
+    const response = await axios.post(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+        {
+            contents: [
+                {
+                    parts: [
+                        { text: text }
+                    ]
+                }
+            ]
+        }
+    );
+
+    return response.data.candidates[0].content.parts[0].text;
+}
 
 
 
@@ -54,7 +67,7 @@ app.post("/webhook", async (req, res) => {
         try {
     const result = await model.generateContent("text");
     const response = await result.response;
-    const reply = response.text();
+    const reply = await getGeminiReply(text);
 
     await axios.post(
         `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
