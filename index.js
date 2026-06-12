@@ -1,4 +1,3 @@
-
 require("dotenv").config();
 const express = require("express");
 const axios = require("axios");
@@ -53,7 +52,7 @@ app.post("/webhook", async (req, res) => {
         const text = msg.text?.body;
 
         try {
-    const result = await model.generateContent(text);
+    const result = await model.generateContent("hello");
     const response = await result.response;
     const reply = response.text();
 
