@@ -11,18 +11,21 @@ app.use(express.json());
 async function getAIReply(text) {
     try {
         const response = await axios.post(
-            "https://api-inference.huggingface.co/models/microsoft/DialoGPT-medium",
-            {
-                inputs: text
-            },
+    `https://api-inference.huggingface.co/models/microsoft/DialoGPT-medium`,
+    {
+        messaging_product: "whatsapp",
+        to: from,
+        text: { body: reply }
+    },
             {
                 headers: {
-                    Authorization: `Bearer ${process.env.HF_API_KEY}`
+                    Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+                    "Content-Type": "application/json"
                 }
             }
         );
 
-        return response.data.generated_text || "No response";
+        return response.data.choices[0].message.content;
     } catch (err) {
         console.log("AI ERROR:", err.message);
         return "AI is currently unavailable.";
@@ -81,7 +84,7 @@ app.post("/webhook", async (req, res) => {
             const reply = await getAIReply(text);
 
             await axios.post(
-                `https://api-inference.huggingface.co/models/microsoft/DialoGPT-medium`,
+                
                 {
                     messaging_product: "whatsapp",
                     to: from,
