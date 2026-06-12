@@ -84,6 +84,10 @@ app.post("/webhook", async (req, res) => {
         const value = changes?.value;
 
         const msg = value?.messages?.[0];
+        let processedMessages = new Set();
+
+if (processedMessages.has(msg.id)) return;
+processedMessages.add(msg.id);
 
         if (!msg) {
             return res.sendStatus(200);
@@ -96,6 +100,7 @@ app.post("/webhook", async (req, res) => {
         console.log("TEXT:", text);
 
         const reply = await getAIReply(text);
+        if (!reply) reply = "Sorry, I didn't understand.";
 
         await axios.post(
   `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
