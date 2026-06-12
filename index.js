@@ -2,45 +2,64 @@ require("dotenv").config();
 const express = require("express");
 const axios = require("axios");
 
-
 const app = express();
 app.use(express.json());
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-
-async function getGeminiReply(text) {
-    const response = await axios.post(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
-        {
-            contents: [
-                {
-                    parts: [
-                        { text: text }
-                    ]
+/* =========================
+   FREE AI FUNCTION (HUGGINGFACE)
+========================= */
+async function getAIReply(text) {
+    try {
+        const response = await axios.post(
+            "https://api-inference.huggingface.co/models/microsoft/DialoGPT-medium",
+            {
+                inputs: text
+            },
+            {
+                headers: {
+                    Authorization: `Bearer ${process.env.HF_API_KEY || ""}`
                 }
-            ]
-        }
-    );
+            }
+        );
 
-    return response.data.candidates[0].content.parts[0].text;
+        // fallback safe parsing
+        const reply =
+            response.data?.[0]?.generated_text ||
+            response.data?.generated_text ||
+            "Sorry, I couldn't respond.";
+
+        return reply;
+    } catch (err) {
+        console.log("AI ERROR:", err.message);
+        return "AI is currently unavailable.";
+    }
 }
 
-
-
+/* =========================
+   LOG MIDDLEWARE
+========================= */
 app.use((req, res, next) => {
     console.log("🔥 REQUEST:", req.method, req.url);
     next();
 });
 
+/* =========================
+   HOME ROUTE
+========================= */
 app.get("/", (req, res) => {
     res.send("🤖 WhatsApp Bot is Running Successfully!");
 });
 
+/* =========================
+   WHATSAPP CONFIG
+========================= */
 const VERIFY_TOKEN = "my_verify_token";
-const ACCESS_TOKEN = "EAAfCHL8qDZBEBRiZBcGJ50ywZCn3ty39cyOScfhj7vZB3KZCs4BESl9enUwZCdX2LIH1WBe2fEfpQnncnWbchvnwSFWAZAR36eisy0ZAbQOYrziyh9qvrwUgIceSeFTFFfKTQVxEhCd4QTZBR6IwPP6QTB7coRogctqLn5xFfqSQY0fj8hwfh6ZCS9R3mAN1ZAvHwZDZD";
-const PHONE_NUMBER_ID = "1149930188205694";
+const ACCESS_TOKEN = "YOUR_WHATSAPP_ACCESS_TOKEN";
+const PHONE_NUMBER_ID = "YOUR_PHONE_NUMBER_ID";
 
-// GET (Webhook verification)
+/* =========================
+   WEBHOOK VERIFY
+========================= */
 app.get("/webhook", (req, res) => {
     const mode = req.query["hub.mode"];
     const token = req.query["hub.verify_token"];
@@ -53,9 +72,10 @@ app.get("/webhook", (req, res) => {
     res.sendStatus(403);
 });
 
-// POST (Messages come here)
+/* =========================
+   MESSAGE HANDLER
+========================= */
 app.post("/webhook", async (req, res) => {
-
     console.log("🔥 MESSAGE RECEIVED:", JSON.stringify(req.body, null, 2));
 
     const msg = req.body.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
@@ -65,37 +85,36 @@ app.post("/webhook", async (req, res) => {
         const text = msg.text?.body;
 
         try {
-    const result = await model.generateContent("text");
-    const response = await result.response;
-    const reply = await getGeminiReply(text);
+            const reply = await getAIReply(text);
 
-    await axios.post(
-        `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
-        {
-            messaging_product: "whatsapp",
-            to: from,
-            text: { body: reply }
-        },
-        {
-            headers: {
-                Authorization: `Bearer ${ACCESS_TOKEN}`,
-                "Content-Type": "application/json"
-            }
+            await axios.post(
+                `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
+                {
+                    messaging_product: "whatsapp",
+                    to: from,
+                    text: { body: reply }
+                },
+                {
+                    headers: {
+                        Authorization: `Bearer ${ACCESS_TOKEN}`,
+                        "Content-Type": "application/json"
+                    }
+                }
+            );
+
+        } catch (err) {
+            console.log("🔥 BOT ERROR:", err.message);
         }
-    );
-
-} catch (err) {
-     console.log("🔥 GEMINI FULL ERROR:", JSON.stringify(err, null, 2));
-
-    
-}
     }
 
     res.sendStatus(200);
 });
-// START SERVER
+
+/* =========================
+   START SERVER
+========================= */
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-    console.log("Server running on port", PORT);
+    console.log("🚀 Server running on port", PORT);
 });
