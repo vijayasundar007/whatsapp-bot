@@ -73,22 +73,9 @@ app.post("/webhook", async (req, res) => {
     );
 
 } catch (err) {
-    console.log("Gemini Error:", err.message);
+     console.log("🔥 GEMINI FULL ERROR:", JSON.stringify(err, null, 2));
 
-    await axios.post(
-        `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
-        {
-            messaging_product: "whatsapp",
-            to: from,
-            text: { body: "AI error. Please try again." }
-        },
-        {
-            headers: {
-                Authorization: `Bearer ${ACCESS_TOKEN}`,
-                "Content-Type": "application/json"
-            }
-        }
-    );
+    
 }
     }
 
