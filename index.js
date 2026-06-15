@@ -15,6 +15,23 @@ const supabase = createClient(
   process.env.SUPABASE_KEY
 );
 
+// 👇 ADD HERE
+async function saveMessage(phone, role, content) {
+  const { error } = await supabase
+    .from("conversations")
+    .insert([
+      {
+        phone,
+        role,
+        content
+      }
+    ]);
+
+  if (error) {
+    console.error("Supabase save error:", error);
+  }
+}
+
 
 
 const app = express();
@@ -150,6 +167,7 @@ app.post("/webhook", async (req, res) => {
 
         const from = msg.from;
         const text = msg.text.body;
+        await saveMessage(from, "user", text);
         const lowerText = text.toLowerCase();
 
 if (
