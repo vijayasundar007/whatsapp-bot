@@ -6,6 +6,8 @@ const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const express = require("express");
 const axios = require("axios");
 const { createClient } = require("@supabase/supabase-js");
+console.log("SUPABASE_URL =", process.env.SUPABASE_URL);
+console.log("SUPABASE_KEY =", process.env.SUPABASE_KEY ? "FOUND" : "MISSING");
 
 // Supabase connection
 const supabase = createClient(
