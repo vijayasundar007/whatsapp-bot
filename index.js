@@ -81,11 +81,14 @@ async function getAIReply(text, phone) {
        const messages = [
     {
         role: "system",
-        content: `You are a smart WhatsApp AI assistant.
-You help users with questions, coding, business, marketing, education, and general knowledge.
-Remember previous messages from the conversation.
-Reply clearly and naturally.
-If you don't know something, say so honestly.`
+        content:  `
+You are a WhatsApp AI assistant.
+Do NOT assume user identity or repeat personal name unless user explicitly says it.
+
+Do NOT continue previous topics unless asked.
+
+Keep responses short and accurate.
+`
     },
     ...history
 ];
@@ -237,32 +240,31 @@ const lowerText = text.toLowerCase();
 const state = userState.get(from);
 
 // ================= IMAGE YES FLOW =================
-if (state === "WAITING_IMAGE") {
+if (state === "WAITING_IMAGE" && lowerText === "yes") {
 
-    if (lowerText === "yes") {
+    const imageData = imageStore.get(from);
 
-        const imageData = imageStore.get(from);
+    if (!imageData) return res.sendStatus(200);
 
-        if (!imageData) return res.sendStatus(200);
+    userState.delete(from);
 
-        userState.delete(from);
+    await axios.post(
+        `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
+        {
+            messaging_product: "whatsapp",
+            to: from,
+            text: { body: "🔍 Analyzing your image now..." }
+        },
+        {
+            headers: { Authorization: `Bearer ${ACCESS_TOKEN}` }
+        }
+    );
 
-        await axios.post(
-            `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
-            {
-                messaging_product: "whatsapp",
-                to: from,
-                text: { body: "🔍 Analyzing your image now..." }
-            },
-            {
-                headers: { Authorization: `Bearer ${ACCESS_TOKEN}` }
-            }
-        );
+    console.log("READY FOR VISION:", imageData.imageId);
 
-        console.log("READY FOR VISION:", imageData.imageId);
+    // 🚨 IMPORTANT: STOP HERE
+    return res.sendStatus(200);
 
-        return res.sendStatus(200);
-    }
 }
     // ================= NORMAL AI =================
 
