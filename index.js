@@ -1,5 +1,6 @@
 require("dotenv").config();
 
+const imageStore = new Map();
 const userState = new Map();
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
 const ACCESS_TOKEN = process.env.ACCESS_TOKEN;
@@ -198,6 +199,13 @@ app.post("/webhook", async (req, res) => {
       const imageBuffer = await downloadImage(imageUrl);
 
       console.log("IMAGE SIZE:", imageBuffer.length);
+      imageStore.set(from, {
+  imageId,
+  imageUrl,
+  imageBuffer
+});
+
+userState.set(from, "WAITING_IMAGE");
 
       userState.set(from, "WAITING_IMAGE");
 
@@ -232,29 +240,38 @@ app.post("/webhook", async (req, res) => {
 
     if (state === "WAITING_IMAGE") {
 
-      if (lowerText === "yes") {
+     if (state === "WAITING_IMAGE") {
 
-        userState.delete(from);
+  if (lowerText === "yes") {
 
-        const reply = "🔍 Analyzing image now... (next vision step)";
+    const imageData = imageStore.get(from);
 
-        await axios.post(
-          `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
-          {
-            messaging_product: "whatsapp",
-            to: from,
-            text: { body: reply }
-          },
-          {
-            headers: {
-              Authorization: `Bearer ${ACCESS_TOKEN}`
-            }
-          }
-        );
-
-        return res.sendStatus(200);
-      }
+    if (!imageData) {
+      return res.sendStatus(200);
     }
+
+    userState.delete(from);
+
+    const reply = "🔍 Analyzing your image now...";
+
+    await axios.post(
+      `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
+      {
+        messaging_product: "whatsapp",
+        to: from,
+        text: { body: reply }
+      },
+      {
+        headers: { Authorization: `Bearer ${ACCESS_TOKEN}` }
+      }
+    );
+
+    // 👉 HERE YOU WILL CALL VISION AI NEXT STEP
+    console.log("READY FOR VISION:", imageData.imageId);
+
+    return res.sendStatus(200);
+  }
+}
 
     // ================= NORMAL AI =================
 
