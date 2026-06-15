@@ -1,5 +1,6 @@
 require("dotenv").config();
 
+const userState = new Map();
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
 const ACCESS_TOKEN = process.env.ACCESS_TOKEN;
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
@@ -179,136 +180,110 @@ app.get("/webhook", (req, res) => {
    MESSAGE HANDLER
 ========================= */
 app.post("/webhook", async (req, res) => {
-    try {
+  try {
 
-        const value = req.body.entry?.[0]?.changes?.[0]?.value;
+    const value = req.body.entry?.[0]?.changes?.[0]?.value;
+    const msg = value?.messages?.[0];
 
-        const msg = value?.messages?.[0];
-       if (msg?.type === "image") {
+    if (!msg) return res.sendStatus(200);
 
-    const imageId = msg.image.id;
-    console.log("IMAGE ID:", imageId);
+    const from = msg.from;
 
-    const imageUrl = await getWhatsAppImageUrl(imageId);
-    console.log("IMAGE URL:", imageUrl);
+    // ================= IMAGE HANDLER =================
+    if (msg?.type === "image") {
 
-    const imageBuffer = await downloadImage(imageUrl);
-    console.log("IMAGE SIZE:", imageBuffer.length);
+      const imageId = msg.image.id;
 
-    console.log("📷 IMAGE MESSAGE RECEIVED");
-    console.log("FULL MSG:", JSON.stringify(msg, null, 2));
+      const imageUrl = await getWhatsAppImageUrl(imageId);
+      const imageBuffer = await downloadImage(imageUrl);
 
-    // 👇 TEMP RESPONSE (NO MORE STATIC TEXT)
-    await axios.post(
+      console.log("IMAGE SIZE:", imageBuffer.length);
+
+      userState.set(from, "WAITING_IMAGE");
+
+      await axios.post(
         `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
         {
-            messaging_product: "whatsapp",
-            to: msg.from,
-            text: {
-                body: "📸 Image received. Now we will analyze it with AI next step."
-            }
+          messaging_product: "whatsapp",
+          to: from,
+          text: {
+            body: "📸 Image received. Reply YES to analyze it."
+          }
         },
         {
-            headers: {
-                Authorization: `Bearer ${ACCESS_TOKEN}`,
-                "Content-Type": "application/json"
-            }
+          headers: {
+            Authorization: `Bearer ${ACCESS_TOKEN}`
+          }
         }
-    );
+      );
 
-    return res.sendStatus(200);
-}
+      return res.sendStatus(200);
+    }
 
-        // 🔴 ONLY PROCESS REAL MESSAGES
-        if (!msg || !msg.from || !msg.text?.body) {
-            return res.sendStatus(200);
-        }
+    // ================= TEXT HANDLER (ADD YOUR CODE HERE) =================
 
-        const msgId = msg.id || msg.timestamp + msg.from;
+    const text = msg.text?.body;
+    if (!text) return res.sendStatus(200);
 
-        if (!global.processedMessages) {
-            global.processedMessages = new Set();
-        }
+    const lowerText = text.toLowerCase();
 
-        if (global.processedMessages.has(msgId)) {
-            return res.sendStatus(200);
-        }
+    // 🔥 STATE CHECK (ADD HERE)
+    const state = userState.get(from);
 
-        global.processedMessages.add(msgId);
+    if (state === "WAITING_IMAGE") {
 
-        const from = msg.from;
-        const text = msg.text.body;
-        await saveMessage(from, "user", text);
-        const lowerText = text.toLowerCase();
+      if (lowerText === "yes") {
 
-if (
-    lowerText.includes("image") ||
-    lowerText.includes("photo") ||
-    lowerText.includes("picture")
-) {
+        userState.delete(from);
 
-    const imageUrl = await getImageUrl(text);
-
-    if (imageUrl) {
+        const reply = "🔍 Analyzing image now... (next vision step)";
 
         await axios.post(
-            `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
-            {
-                messaging_product: "whatsapp",
-                to: from,
-                type: "image",
-                image: {
-                    link: imageUrl
-                }
-            },
-            {
-                headers: {
-                    Authorization: `Bearer ${ACCESS_TOKEN}`,
-                    "Content-Type": "application/json"
-                }
+          `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
+          {
+            messaging_product: "whatsapp",
+            to: from,
+            text: { body: reply }
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${ACCESS_TOKEN}`
             }
+          }
         );
 
         return res.sendStatus(200);
+      }
     }
-}
 
-        const reply = await getAIReply(text, from);
-       
-        // Save AI reply to Supabase
-await saveMessage(
-  from,
-  "assistant",
-  reply
-);
+    // ================= NORMAL AI =================
 
-        if (!reply || reply.trim() === "") {
-            return res.sendStatus(200);
+    await saveMessage(from, "user", text);
+
+    const reply = await getAIReply(text, from);
+
+    await saveMessage(from, "assistant", reply);
+
+    await axios.post(
+      `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
+      {
+        messaging_product: "whatsapp",
+        to: from,
+        text: { body: reply }
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${ACCESS_TOKEN}`
         }
+      }
+    );
 
-        await axios.post(
-            `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
-            {
-                messaging_product: "whatsapp",
-                to: from,
-                text: { body: reply }
-            },
-            {
-                headers: {
-                    Authorization: `Bearer ${ACCESS_TOKEN}`,
-                    "Content-Type": "application/json"
-                }
-            }
-        );
+    return res.sendStatus(200);
 
-        console.log("✅ REPLY SENT");
-
-        res.sendStatus(200);
-
-    } catch (err) {
-        console.log("🔥 WEBHOOK ERROR:", err.response?.data || err.message);
-        res.sendStatus(200);
-    }
+  } catch (err) {
+    console.log("ERROR:", err.message);
+    res.sendStatus(200);
+  }
 });
 /* =========================
    START SERVER
