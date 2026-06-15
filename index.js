@@ -97,7 +97,7 @@ If you don't know something, say so honestly.`
         const response = await axios.post(
             "https://openrouter.ai/api/v1/chat/completions",
             {
-                model: "openai/gpt-3.5-turbo",
+              model: "google/gemini-1.5-flash",
                 messages: messages
             },
             {
