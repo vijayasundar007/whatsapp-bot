@@ -1,5 +1,5 @@
 require("dotenv").config();
-
+const processed = new Set();
 const imageStore = new Map();
 const userState = new Map();
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
@@ -190,6 +190,12 @@ app.post("/webhook", async (req, res) => {
     const msg = value?.messages?.[0];
 
     if (!msg) return res.sendStatus(200);
+    const msgId = msg.id;
+
+if (processed.has(msgId)) {
+    return res.sendStatus(200);
+}
+processed.add(msgId);
 
     const from = msg.from;
 
@@ -243,8 +249,12 @@ const state = userState.get(from);
 if (state === "WAITING_IMAGE" && lowerText === "yes") {
 
     const imageData = imageStore.get(from);
+    userState.delete(from);
+    userState.set(from, "PROCESSING_IMAGE"); // 🔥 ADD THIS
 
-    if (!imageData) return res.sendStatus(200);
+    if (!imageData) {
+        userState.delete(from);
+        return res.sendStatus(200);}
 
     userState.delete(from);
     // 🔥 ADD THIS (YOUR CODE GOES HERE)
@@ -279,6 +289,7 @@ const ai = await axios.post(
         }
     }
 );
+userState.delete(from);
 
 const aiReply = ai.data.choices[0].message.content;
 //send reply to whatsapp
