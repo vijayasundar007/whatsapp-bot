@@ -13,6 +13,7 @@
   "type": "commonjs",
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
+    "@supabase/supabase-js": "^2.108.1",
     "axios": "^1.17.0",
     "body-parser": "^2.2.2",
     "dotenv": "^17.4.2",

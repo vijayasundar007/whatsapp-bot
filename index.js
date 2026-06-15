@@ -5,6 +5,14 @@ const ACCESS_TOKEN = process.env.ACCESS_TOKEN;
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const express = require("express");
 const axios = require("axios");
+const { createClient } = require("@supabase/supabase-js");
+
+// Supabase connection
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_KEY
+);
+
 
 
 const app = express();
@@ -208,6 +216,17 @@ if (
    START SERVER
 ========================= */
 const PORT = process.env.PORT || 3000;
+
+// Supabase test
+(async () => {
+  const { data, error } = await supabase
+    .from("conversations")
+    .select("*")
+    .limit(1);
+
+  console.log("SUPABASE TEST:", data);
+  console.log("SUPABASE ERROR:", error);
+})();
 
 app.listen(PORT, () => {
     console.log("🚀 Server running on port", PORT);
