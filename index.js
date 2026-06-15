@@ -247,20 +247,20 @@ if (state === "WAITING_IMAGE" && lowerText === "yes") {
     if (!imageData) return res.sendStatus(200);
 
     userState.delete(from);
-
+const aiReply = await analyzeImage(imageData.imageUrl);
     await axios.post(
         `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
         {
             messaging_product: "whatsapp",
             to: from,
-            text: { body: "🔍 Analyzing your image now..." }
+            text: { body: "🔍 aiReply" }
         },
         {
             headers: { Authorization: `Bearer ${ACCESS_TOKEN}` }
         }
     );
 
-    console.log("READY FOR VISION:", imageData.imageId);
+   
 
     // 🚨 IMPORTANT: STOP HERE
     return res.sendStatus(200);
