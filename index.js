@@ -96,60 +96,65 @@ app.post("/webhook", async (req, res) => {
 
     // ================= IMAGE HANDLING =================
     if (msg.type === "image") {
-      const imageId = msg.image.id;
-      const imageUrl = await getWhatsAppImageUrl(imageId);
-        const base64Image = imageBuffer.toString("base64");
 
-      console.log("IMAGE URL:", imageUrl);
+    const imageId = msg.image.id;
 
-      // VISION AI CALL
-      const aiRes = await axios.post(
-  "https://openrouter.ai/api/v1/chat/completions",
-  {
-   model: "qwen/qwen2-vl-instruct",
-    messages: [
-      {
-        role: "user",
-        content: [
-          {
-            type: "text",
-            text: "Analyze this image and describe everything you see clearly."
-          },
-          {
-            type: "text",
-            text: `IMAGE_DATA_BASE64:\n${base64Image}`
-          }
-        ]
-      }
-    ]
-  },
-  {
-    headers: {
-      Authorization: `Bearer ${OPENROUTER_API_KEY}`,
-      "Content-Type": "application/json"
-    }
-  }
-);
-      const aiReply = aiRes.data.choices[0].message.content;
+    const imageUrl = await getWhatsAppImageUrl(imageId);
 
-      await saveMessage(from, "assistant", aiReply);
+    // ✅ THIS MUST COME FIRST
+    const imageBuffer = await downloadImage(imageUrl);
 
-      await axios.post(
-        `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
+    // now this works
+    const base64Image = imageBuffer.toString("base64");
+
+    console.log("IMAGE SIZE:", imageBuffer.length);
+
+    const aiRes = await axios.post(
+        "https://openrouter.ai/api/v1/chat/completions",
         {
-          messaging_product: "whatsapp",
-          to: from,
-          text: { body: aiReply }
+            model: "meta-llama/llama-3.2-11b-vision-instruct",
+            messages: [
+                {
+                    role: "user",
+                    content: [
+                        {
+                            type: "text",
+                            text: "Describe this image clearly"
+                        },
+                        {
+                            type: "text",
+                            text: base64Image
+                        }
+                    ]
+                }
+            ]
         },
         {
-          headers: {
-            Authorization: `Bearer ${ACCESS_TOKEN}`
-          }
+            headers: {
+                Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+                "Content-Type": "application/json"
+            }
         }
-      );
+    );
 
-      return res.sendStatus(200);
-    }
+    const aiReply = aiRes.data.choices[0].message.content;
+
+    await axios.post(
+        `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
+        {
+            messaging_product: "whatsapp",
+            to: msg.from,
+            text: { body: aiReply }
+        },
+        {
+            headers: {
+                Authorization: `Bearer ${ACCESS_TOKEN}`
+            }
+        }
+    );
+
+    return res.sendStatus(200);
+}
 
     // ================= TEXT HANDLING =================
     if (!msg.text?.body) return res.sendStatus(200);
