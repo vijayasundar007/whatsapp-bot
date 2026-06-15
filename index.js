@@ -105,20 +105,18 @@ app.post("/webhook", async (req, res) => {
       const aiRes = await axios.post(
   "https://openrouter.ai/api/v1/chat/completions",
   {
-    model: "meta-llama/llama-3.2-11b-vision-instruct",
+   model: "qwen/qwen2-vl-instruct",
     messages: [
       {
         role: "user",
         content: [
           {
             type: "text",
-            text: "Describe this image in detail"
+            text: "Analyze this image and describe everything you see clearly."
           },
           {
-            type: "image_url",
-            image_url: {
-              url: `data:image/jpeg;base64,${base64Image}`
-            }
+            type: "text",
+            text: `IMAGE_DATA_BASE64:\n${base64Image}`
           }
         ]
       }
@@ -131,7 +129,6 @@ app.post("/webhook", async (req, res) => {
     }
   }
 );
-
       const aiReply = aiRes.data.choices[0].message.content;
 
       await saveMessage(from, "assistant", aiReply);
