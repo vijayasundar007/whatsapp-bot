@@ -48,6 +48,20 @@ async function getHistory(phone) {
 
   return data || [];
 }
+// 👇 ADD HERE
+async function getWhatsAppImageUrl(imageId) {
+    const response = await axios.get(
+        `https://graph.facebook.com/v19.0/${imageId}`,
+        {
+            headers: {
+                Authorization: `Bearer ${ACCESS_TOKEN}`
+            }
+        }
+    );
+
+    return response.data.url;
+}
+
 
 
 
@@ -164,6 +178,9 @@ app.post("/webhook", async (req, res) => {
 
 const imageId = msg.image.id;
 console.log("IMAGE ID:", imageId);
+
+const imageUrl = await getWhatsAppImageUrl(imageId);
+console.log("IMAGE URL:", imageUrl);
 
              console.log("📷 IMAGE MESSAGE RECEIVED");
     console.log("FULL MSG:", JSON.stringify(msg, null, 2));
