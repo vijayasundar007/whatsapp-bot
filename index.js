@@ -253,7 +253,7 @@ const aiReply = await analyzeImage(imageData.imageUrl);
         {
             messaging_product: "whatsapp",
             to: from,
-            text: { body: "🔍 aiReply" }
+            text: { body: "aiReply" }
         },
         {
             headers: { Authorization: `Bearer ${ACCESS_TOKEN}` }
