@@ -295,7 +295,7 @@ userState.set(from, "WAITING_IMAGE");
       }
     );
 
-    return res.sendStatus(200);
+    return res.sendStatus(200);}
 
   } catch (err) {
     console.log("ERROR:", err.message);
