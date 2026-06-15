@@ -229,6 +229,7 @@ if (
 }
 
         const reply = await getAIReply(text, from);
+        await saveMessage(from, "assistant", aiReply);
         // Save AI reply to Supabase
 await saveMessage(
   from,
