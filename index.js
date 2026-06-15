@@ -147,6 +147,16 @@ async function getImageUrl(query) {
 
     return response.data.photos?.[0]?.src?.large;
 }
+async function downloadImage(url) {
+    const response = await axios.get(url, {
+        responseType: "arraybuffer",
+        headers: {
+            Authorization: `Bearer ${ACCESS_TOKEN}`
+        }
+    });
+
+    return Buffer.from(response.data);
+}
 
 
 
@@ -181,6 +191,15 @@ console.log("IMAGE ID:", imageId);
 
 const imageUrl = await getWhatsAppImageUrl(imageId);
 console.log("IMAGE URL:", imageUrl);
+
+const imageId = msg.image.id;
+console.log("IMAGE ID:", imageId);
+
+const imageUrl = await getWhatsAppImageUrl(imageId);
+console.log("IMAGE URL:", imageUrl);
+
+const imageBuffer = await downloadImage(imageUrl);
+console.log("IMAGE SIZE:", imageBuffer.length);
 
              console.log("📷 IMAGE MESSAGE RECEIVED");
     console.log("FULL MSG:", JSON.stringify(msg, null, 2));
