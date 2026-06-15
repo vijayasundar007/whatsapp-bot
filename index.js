@@ -32,6 +32,23 @@ async function saveMessage(phone, role, content) {
   }
 }
 
+// 👇 ADD HERE
+async function getHistory(phone) {
+  const { data, error } = await supabase
+    .from("conversations")
+    .select("role, content")
+    .eq("phone", phone)
+    .order("created_at", { ascending: true })
+    .limit(20);
+
+  if (error) {
+    console.error("History error:", error);
+    return [];
+  }
+
+  return data || [];
+}
+
 
 
 const app = express();
@@ -40,15 +57,23 @@ app.use(express.json());
 /* =========================
    FREE AI FUNCTION (HUGGINGFACE)
 ========================= */
-async function getAIReply(text) {
+async function getAIReply(text, phone) {
     try {
+
+        const history = await getHistory(phone);
+
+        const messages = [...history];
+
+        messages.push({
+            role: "user",
+            content: text
+        });
+
         const response = await axios.post(
             "https://openrouter.ai/api/v1/chat/completions",
             {
-                model: "openai/gpt-3.5-turbo",   // ✅ SAFE MODEL
-                messages: [
-                    { role: "user", content: text }
-                ]
+                model: "openai/gpt-3.5-turbo",
+                messages: messages
             },
             {
                 headers: {
@@ -59,6 +84,7 @@ async function getAIReply(text) {
         );
 
         return response.data.choices[0].message.content;
+
     } catch (err) {
         console.log("AI ERROR:", err.response?.data || err.message);
         return "AI is currently unavailable.";
@@ -202,7 +228,13 @@ if (
     }
 }
 
-        const reply = await getAIReply(text);
+        const reply = await getAIReply(text, from);
+        // Save AI reply to Supabase
+await saveMessage(
+  from,
+  "assistant",
+  aiReply
+);
 
         if (!reply || reply.trim() === "") {
             return res.sendStatus(200);
