@@ -68,7 +68,7 @@ async function sendText(to, body) {
 }
 
 // ─── AI Core (Claude via OpenRouter) ─────────────────────────────────────────
-const MODEL = "anthropic/claude-sonnet-4-5"; // Claude via OpenRouter
+const MODEL = "meta-llama/llama-3.2-11b-vision-instruct"; // Claude via OpenRouter
 
 const SYSTEM_PROMPT = `You are a smart, helpful WhatsApp AI assistant powered by Claude.
 - Keep replies concise and friendly (this is a chat, not an essay).
