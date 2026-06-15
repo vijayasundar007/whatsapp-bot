@@ -247,7 +247,41 @@ if (state === "WAITING_IMAGE" && lowerText === "yes") {
     if (!imageData) return res.sendStatus(200);
 
     userState.delete(from);
-const aiReply = await analyzeImage(imageData.imageUrl);
+    // 🔥 ADD THIS (YOUR CODE GOES HERE)
+const base64Image = imageData.imageBuffer.toString("base64");
+
+const ai = await axios.post(
+    "https://openrouter.ai/api/v1/chat/completions",
+    {
+        model: "meta-llama/llama-3.2-11b-vision-instruct",
+        messages: [
+            {
+                role: "user",
+                content: [
+                    {
+                        type: "text",
+                        text: "Describe this image clearly and accurately"
+                    },
+                    {
+                        type: "image_url",
+                        image_url: {
+                            url: `data:image/jpeg;base64,${base64Image}`
+                        }
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        headers: {
+            Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+            "Content-Type": "application/json"
+        }
+    }
+);
+
+const aiReply = ai.data.choices[0].message.content;
+//send reply to whatsapp
     await axios.post(
         `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
         {
