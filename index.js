@@ -184,29 +184,28 @@ app.post("/webhook", async (req, res) => {
         const value = req.body.entry?.[0]?.changes?.[0]?.value;
 
         const msg = value?.messages?.[0];
-        if (msg?.type === "image") {
+       if (msg?.type === "image") {
 
-const imageId = msg.image.id;
-console.log("IMAGE ID:", imageId);
+    const imageId = msg.image.id;
+    console.log("IMAGE ID:", imageId);
 
-const imageUrl = await getWhatsAppImageUrl(imageId);
-console.log("IMAGE URL:", imageUrl);
+    const imageUrl = await getWhatsAppImageUrl(imageId);
+    console.log("IMAGE URL:", imageUrl);
 
+    const imageBuffer = await downloadImage(imageUrl);
+    console.log("IMAGE SIZE:", imageBuffer.length);
 
-
-const imageBuffer = await downloadImage(imageUrl);
-console.log("IMAGE SIZE:", imageBuffer.length);
-
-             console.log("📷 IMAGE MESSAGE RECEIVED");
+    console.log("📷 IMAGE MESSAGE RECEIVED");
     console.log("FULL MSG:", JSON.stringify(msg, null, 2));
 
+    // 👇 TEMP RESPONSE (NO MORE STATIC TEXT)
     await axios.post(
         `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
         {
             messaging_product: "whatsapp",
             to: msg.from,
             text: {
-                body: "📷 I received your image."
+                body: "📸 Image received. Now we will analyze it with AI next step."
             }
         },
         {
@@ -219,7 +218,6 @@ console.log("IMAGE SIZE:", imageBuffer.length);
 
     return res.sendStatus(200);
 }
-
 
         // 🔴 ONLY PROCESS REAL MESSAGES
         if (!msg || !msg.from || !msg.text?.body) {
