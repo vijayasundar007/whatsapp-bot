@@ -234,7 +234,7 @@ if (
 await saveMessage(
   from,
   "assistant",
-  aiReply
+  reply
 );
 
         if (!reply || reply.trim() === "") {
