@@ -62,7 +62,18 @@ async function getAIReply(text, phone) {
 
         const history = await getHistory(phone);
 
-        const messages = [...history];
+       const messages = [
+    {
+        role: "system",
+        content: `You are a smart WhatsApp AI assistant.
+You help users with questions, coding, business, marketing, education, and general knowledge.
+Remember previous messages from the conversation.
+Reply clearly and naturally.
+If you don't know something, say so honestly.`
+    },
+    ...history
+];
+
 
         messages.push({
             role: "user",
