@@ -161,6 +161,10 @@ app.post("/webhook", async (req, res) => {
 
         const msg = value?.messages?.[0];
         if (msg?.type === "image") {
+
+const imageId = msg.image.id;
+console.log("IMAGE ID:", imageId);
+
              console.log("📷 IMAGE MESSAGE RECEIVED");
     console.log("FULL MSG:", JSON.stringify(msg, null, 2));
 
