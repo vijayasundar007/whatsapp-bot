@@ -192,11 +192,7 @@ console.log("IMAGE ID:", imageId);
 const imageUrl = await getWhatsAppImageUrl(imageId);
 console.log("IMAGE URL:", imageUrl);
 
-const imageId = msg.image.id;
-console.log("IMAGE ID:", imageId);
 
-const imageUrl = await getWhatsAppImageUrl(imageId);
-console.log("IMAGE URL:", imageUrl);
 
 const imageBuffer = await downloadImage(imageUrl);
 console.log("IMAGE SIZE:", imageBuffer.length);
