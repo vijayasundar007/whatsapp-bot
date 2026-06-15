@@ -84,6 +84,16 @@ async function getAIReply(text, phone) {
   return res.data.choices[0].message.content;
 }
 
+async function downloadImage(url) {
+    const response = await axios.get(url, {
+        responseType: "arraybuffer",
+        headers: {
+            Authorization: `Bearer ${ACCESS_TOKEN}`
+        }
+    });
+
+    return Buffer.from(response.data);
+}
 // ---------------- WEBHOOK ----------------
 app.post("/webhook", async (req, res) => {
   try {
