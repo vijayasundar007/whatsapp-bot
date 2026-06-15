@@ -261,46 +261,56 @@ if (state === "WAITING_IMAGE" && lowerText === "yes") {
 
     userState.delete(from);
 
+    const base64Image = imageData.imageBuffer.toString("base64");
+
+    const response = await axios.post(
+        "https://openrouter.ai/api/v1/chat/completions",
+        {
+            model: "openai/gpt-4o",
+            messages: [
+                {
+                    role: "user",
+                    content: [
+                        {
+                            type: "text",
+                            text: "Describe this image clearly"
+                        },
+                        {
+                            type: "image_url",
+                            image_url: {
+                                url: `data:image/jpeg;base64,${base64Image}`
+                            }
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            headers: {
+                Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+                "Content-Type": "application/json"
+            }
+        }
+    );
+
+    const aiReply = response.data.choices[0].message.content;
+
     await axios.post(
         `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
         {
             messaging_product: "whatsapp",
             to: from,
-            text: { body: "🔍 Analyzing your image now..." }
+            text: { body: aiReply }
         },
         {
-            headers: { Authorization: `Bearer ${ACCESS_TOKEN}` }
+            headers: {
+                Authorization: `Bearer ${ACCESS_TOKEN}`
+            }
         }
     );
 
-    console.log("READY FOR VISION:", imageData.imageId);
-
-    // 🚨 IMPORTANT: STOP HERE
     return res.sendStatus(200);
-
 }
-    // ================= NORMAL AI =================
-
-   await saveMessage(from, "user", text);
-
-const reply = await getAIReply(text, from);
-
-await saveMessage(from, "assistant", reply);
-
-await axios.post(
-    `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
-    {
-        messaging_product: "whatsapp",
-        to: from,
-        text: { body: reply }
-    },
-    {
-        headers: { Authorization: `Bearer ${ACCESS_TOKEN}` }
-    }
-);
-
-return res.sendStatus(200);
-
   } catch (err) {
     console.log("ERROR:", err.message);
     res.sendStatus(200);
