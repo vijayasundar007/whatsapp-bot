@@ -102,8 +102,21 @@ Keep responses short and accurate.
         const response = await axios.post(
             "https://openrouter.ai/api/v1/chat/completions",
             {
-              model: "meta-llama/llama-3.2-11b-vision-instruct",
-                messages: messages
+             model: "openai/gpt-4o",
+                messages:  [
+  {
+    role: "user",
+    content: [
+      { type: "text", text: "Describe this image" },
+      {
+        type: "image_url",
+        image_url: {
+          url: `data:image/jpeg;base64,${base64Image}`
+        }
+      }
+    ]
+  }
+]
             },
             {
                 headers: {
