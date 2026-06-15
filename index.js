@@ -102,7 +102,7 @@ Keep responses short and accurate.
         const response = await axios.post(
             "https://openrouter.ai/api/v1/chat/completions",
             {
-             model: "openai/gpt-4o",
+              model: "meta-llama/llama-3.2-11b-vision-instruct",
                 messages: messages
             },
             {
