@@ -14,7 +14,7 @@ const { createClient } = require("@supabase/supabase-js");
 console.log("SUPABASE_URL =", process.env.SUPABASE_URL);
 console.log("SUPABASE_KEY =", process.env.SUPABASE_KEY ? "FOUND" : "MISSING");
 
-// ─── Supabase ───────────────────────────────────────────────────────────────
+// ─── Supabase ────────────────────────────────────────────────────────────────
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_KEY
@@ -38,7 +38,7 @@ async function getHistory(phone) {
   return data || [];
 }
 
-// ─── WhatsApp Helpers ────────────────────────────────────────────────────────
+// ─── WhatsApp Helpers ─────────────────────────────────────────────────────────
 async function getWhatsAppMediaUrl(mediaId) {
   const response = await axios.get(
     `https://graph.facebook.com/v19.0/${mediaId}`,
@@ -58,24 +58,78 @@ async function downloadMedia(url) {
 async function sendText(to, body) {
   await axios.post(
     `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
+    { messaging_product: "whatsapp", to, text: { body } },
+    { headers: { Authorization: `Bearer ${ACCESS_TOKEN}` } }
+  );
+}
+
+// ✅ NEW: Send image by public URL
+async function sendImage(to, imageUrl, caption = "") {
+  await axios.post(
+    `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
     {
       messaging_product: "whatsapp",
       to,
-      text: { body }
+      type: "image",
+      image: { link: imageUrl, caption }
     },
     { headers: { Authorization: `Bearer ${ACCESS_TOKEN}` } }
   );
 }
 
-// ─── AI Core (Claude via OpenRouter) ─────────────────────────────────────────
-const MODEL = "meta-llama/llama-3.2-11b-vision-instruct"; // Claude via OpenRouter
+// ✅ NEW: Search Pexels for an image
+async function searchPexelsImage(query) {
+  try {
+    const response = await axios.get(
+      `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=1`,
+      { headers: { Authorization: process.env.PEXELS_API_KEY } }
+    );
+    return response.data.photos?.[0]?.src?.large || null;
+  } catch (err) {
+    console.error("Pexels error:", err.message);
+    return null;
+  }
+}
 
-const SYSTEM_PROMPT = `You are a smart, helpful WhatsApp AI assistant powered by Claude.
-- Keep replies concise and friendly (this is a chat, not an essay).
-- Use bullet points or numbered lists when explaining steps.
-- If the user sends an image, describe it clearly and answer any questions about it.
+// ✅ NEW: Detect if user is asking for an image
+function detectImageRequest(text) {
+  const patterns = [
+    /send (me )?(an? |a )?image of (.+)/i,
+    /show (me )?(an? |a )?image of (.+)/i,
+    /give (me )?(an? |a )?image of (.+)/i,
+    /send (me )?(an? |a )?photo of (.+)/i,
+    /show (me )?(an? |a )?photo of (.+)/i,
+    /give (me )?(an? |a )?photo of (.+)/i,
+    /send (me )?(an? |a )?picture of (.+)/i,
+    /show (me )?(an? |a )?picture of (.+)/i,
+    /give (me )?(an? |a )?picture of (.+)/i,
+    /(.+) image please/i,
+    /(.+) photo please/i,
+    /(.+) picture please/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match) {
+      // Return the captured topic (last capture group)
+      return match[match.length - 1].trim();
+    }
+  }
+  return null;
+}
+
+// ─── AI Core ─────────────────────────────────────────────────────────────────
+const MODEL = "meta-llama/llama-3.2-11b-vision-instruct"; // change to "anthropic/claude-sonnet-4-5" if available
+
+const SYSTEM_PROMPT = `You are a smart, helpful WhatsApp AI assistant.
+- Keep replies concise and friendly (this is a chat app, not an essay).
+- Use bullet points or numbered lists only when explaining steps.
+- If the user sends an image, describe it clearly and answer questions about it.
 - Do NOT assume the user's name unless they tell you.
-- Do NOT continue previous topics unless the user brings them up.`;
+- Do NOT continue previous topics unless the user brings them up.
+- If the user asks you to send/show/give an image or photo, reply with exactly: IMAGE_REQUEST:<topic>
+  Example: user says "send me a image of cat" → you reply: IMAGE_REQUEST:cat
+  Example: user says "show me sunset photo" → you reply: IMAGE_REQUEST:sunset`;
 
 async function getAIReply(userMessage, phone) {
   try {
@@ -102,16 +156,17 @@ async function getAIReply(userMessage, phone) {
 
     return response.data.choices[0].message.content;
   } catch (err) {
-    console.error("AI ERROR:", err.response?.data || err.message);
+    console.error("AI ERROR:", JSON.stringify(err.response?.data) || err.message);
     return "⚠️ AI is currently unavailable. Please try again shortly.";
   }
 }
 
 async function analyzeImageWithAI(base64Image, mimeType, userPrompt) {
   try {
-    const prompt = userPrompt && userPrompt.toLowerCase() !== "yes"
-      ? userPrompt   // user typed a specific question about the image
-      : "Describe this image clearly and accurately. Mention objects, people, text, colours, and any other notable details.";
+    const prompt =
+      userPrompt && userPrompt.toLowerCase() !== "yes"
+        ? userPrompt
+        : "Describe this image clearly and accurately. Mention objects, people, text, colours, and any other notable details.";
 
     const response = await axios.post(
       "https://openrouter.ai/api/v1/chat/completions",
@@ -143,12 +198,12 @@ async function analyzeImageWithAI(base64Image, mimeType, userPrompt) {
 
     return response.data.choices[0].message.content;
   } catch (err) {
-    console.error("Image AI ERROR:", err.response?.data || err.message);
+    console.error("Image AI ERROR:", JSON.stringify(err.response?.data) || err.message);
     return "⚠️ Could not analyse the image. Please try again.";
   }
 }
 
-// ─── Express App ─────────────────────────────────────────────────────────────
+// ─── Express App ──────────────────────────────────────────────────────────────
 const app = express();
 app.use(express.json());
 
@@ -157,7 +212,7 @@ app.use((req, res, next) => {
   next();
 });
 
-app.get("/", (req, res) => res.send("🤖 WhatsApp Bot (Claude) is Running!"));
+app.get("/", (req, res) => res.send("🤖 WhatsApp Bot is Running!"));
 
 // Webhook verify
 const VERIFY_TOKEN = "my_verify_token";
@@ -183,59 +238,70 @@ app.post("/webhook", async (req, res) => {
     const from = msg.from;
     const state = userState.get(from);
 
-    // ── IMAGE received ──────────────────────────────────────────────────────
+    // ── IMAGE received ────────────────────────────────────────────────────────
     if (msg.type === "image") {
       const imageId = msg.image.id;
-      const caption = msg.image?.caption || "";        // caption typed with image
+      const caption = msg.image?.caption || "";
 
       const mediaUrl = await getWhatsAppMediaUrl(imageId);
       const imageBuffer = await downloadMedia(mediaUrl);
 
-      imageStore.set(from, {
-        imageBuffer,
-        mimeType: "image/jpeg",
-        caption
-      });
+      imageStore.set(from, { imageBuffer, mimeType: "image/jpeg", caption });
       userState.set(from, "WAITING_IMAGE");
 
-      // If user already wrote a caption/question with the image, analyse immediately
       if (caption) {
         await handleImageAnalysis(from, caption);
       } else {
-        await sendText(from,
-          "📸 Image received!\n\nReply *YES* to describe the image, or type your question about it (e.g. \"What is written here?\")."
+        await sendText(
+          from,
+          "📸 Image received!\n\nReply *YES* to describe it, or type your question (e.g. \"What is written here?\")."
         );
       }
 
       return res.sendStatus(200);
     }
 
-    // ── VIDEO / DOCUMENT / AUDIO received ───────────────────────────────────
+    // ── VIDEO / DOCUMENT / AUDIO received ─────────────────────────────────────
     if (["video", "document", "audio"].includes(msg.type)) {
-      await sendText(from,
+      await sendText(
+        from,
         `📎 I received your ${msg.type}. Currently I can only analyse *images* and answer *text* questions. Send me an image or ask me anything!`
       );
       return res.sendStatus(200);
     }
 
-    // ── TEXT received ────────────────────────────────────────────────────────
+    // ── TEXT received ─────────────────────────────────────────────────────────
     const text = msg.text?.body;
     if (!text) return res.sendStatus(200);
 
     const lowerText = text.trim().toLowerCase();
 
-    // User is replying to a pending image
+    // User replying to pending image
     if (state === "WAITING_IMAGE") {
       await handleImageAnalysis(from, text);
       return res.sendStatus(200);
     }
 
-    // Normal text → Claude
+    // ✅ Check if user is asking for an image (pattern match first)
+    const imageTopic = detectImageRequest(text);
+    if (imageTopic) {
+      await handleSendImage(from, imageTopic);
+      return res.sendStatus(200);
+    }
+
+    // Normal text → AI
     await saveMessage(from, "user", text);
     const reply = await getAIReply(text, from);
     await saveMessage(from, "assistant", reply);
-    await sendText(from, reply);
 
+    // ✅ Check if AI wants to send an image (AI detected image request)
+    if (reply.startsWith("IMAGE_REQUEST:")) {
+      const topic = reply.replace("IMAGE_REQUEST:", "").trim();
+      await handleSendImage(from, topic);
+      return res.sendStatus(200);
+    }
+
+    await sendText(from, reply);
     return res.sendStatus(200);
 
   } catch (err) {
@@ -260,14 +326,28 @@ async function handleImageAnalysis(from, userPrompt) {
   const base64Image = imageData.imageBuffer.toString("base64");
   const aiReply = await analyzeImageWithAI(base64Image, imageData.mimeType, userPrompt);
 
-  // Save to history so the conversation is continuous
   await saveMessage(from, "user", `[User sent an image] ${userPrompt}`);
   await saveMessage(from, "assistant", aiReply);
 
   await sendText(from, aiReply);
 }
 
-// ─── Start ────────────────────────────────────────────────────────────────────
+// ✅ NEW: Send Image Helper
+async function handleSendImage(from, topic) {
+  await sendText(from, `🔍 Searching for a *${topic}* image...`);
+
+  const imageUrl = await searchPexelsImage(topic);
+
+  if (imageUrl) {
+    await sendImage(from, imageUrl, `Here's a ${topic} image for you! 🖼️`);
+    await saveMessage(from, "user", `[User asked for image of: ${topic}]`);
+    await saveMessage(from, "assistant", `[Sent Pexels image of: ${topic}]`);
+  } else {
+    await sendText(from, `😔 Sorry, I couldn't find an image for *${topic}*. Try a different keyword!`);
+  }
+}
+
+// ─── Start Server ─────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
 
 (async () => {
