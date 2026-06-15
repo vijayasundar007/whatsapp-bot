@@ -229,7 +229,7 @@ if (
 }
 
         const reply = await getAIReply(text, from);
-        await saveMessage(from, "assistant", aiReply);
+       
         // Save AI reply to Supabase
 await saveMessage(
   from,
@@ -283,7 +283,4 @@ const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
     console.log("🚀 Server running on port", PORT);
-});
-app.listen(PORT, () => {
-  console.log("Server running");
 });
