@@ -103,32 +103,34 @@ app.post("/webhook", async (req, res) => {
 
       // VISION AI CALL
       const aiRes = await axios.post(
-        "https://openrouter.ai/api/v1/chat/completions",
-        {
-          model: "meta-llama/llama-3.2-11b-vision-instruct",
-          messages: [
-            {
-              role: "user",
-              content: [
-                {
-                  type: "text",
-                  text: "Describe this image in detail"
-                },
-                {
-                  type: "image_url",
-                  image_url: { url: imageUrl }
-                }
-              ]
+  "https://openrouter.ai/api/v1/chat/completions",
+  {
+    model: "meta-llama/llama-3.2-11b-vision-instruct",
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: "Describe this image in detail"
+          },
+          {
+            type: "image_url",
+            image_url: {
+              url: `data:image/jpeg;base64,${base64Image}`
             }
-          ]
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${OPENROUTER_API_KEY}`,
-            "Content-Type": "application/json"
           }
-        }
-      );
+        ]
+      }
+    ]
+  },
+  {
+    headers: {
+      Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+      "Content-Type": "application/json"
+    }
+  }
+);
 
       const aiReply = aiRes.data.choices[0].message.content;
 
