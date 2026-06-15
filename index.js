@@ -98,6 +98,7 @@ app.post("/webhook", async (req, res) => {
     if (msg.type === "image") {
       const imageId = msg.image.id;
       const imageUrl = await getWhatsAppImageUrl(imageId);
+        const base64Image = imageBuffer.toString("base64");
 
       console.log("IMAGE URL:", imageUrl);
 
