@@ -230,72 +230,61 @@ userState.set(from, "WAITING_IMAGE");
 
     // ================= TEXT HANDLER (ADD YOUR CODE HERE) =================
 
-    const text = msg.text?.body;
-    if (!text) return res.sendStatus(200);
+   const text = msg.text?.body;
+if (!text) return res.sendStatus(200);
 
-    const lowerText = text.toLowerCase();
+const lowerText = text.toLowerCase();
+const state = userState.get(from);
 
-    // 🔥 STATE CHECK (ADD HERE)
-    const state = userState.get(from);
+// ================= IMAGE YES FLOW =================
+if (state === "WAITING_IMAGE") {
 
-    if (state === "WAITING_IMAGE") {
+    if (lowerText === "yes") {
 
-     if (state === "WAITING_IMAGE") {
+        const imageData = imageStore.get(from);
 
-  if (lowerText === "yes") {
+        if (!imageData) return res.sendStatus(200);
 
-    const imageData = imageStore.get(from);
+        userState.delete(from);
 
-    if (!imageData) {
-      return res.sendStatus(200);
+        await axios.post(
+            `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
+            {
+                messaging_product: "whatsapp",
+                to: from,
+                text: { body: "🔍 Analyzing your image now..." }
+            },
+            {
+                headers: { Authorization: `Bearer ${ACCESS_TOKEN}` }
+            }
+        );
+
+        console.log("READY FOR VISION:", imageData.imageId);
+
+        return res.sendStatus(200);
     }
-
-    userState.delete(from);
-
-    const reply = "🔍 Analyzing your image now...";
-
-    await axios.post(
-      `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
-      {
-        messaging_product: "whatsapp",
-        to: from,
-        text: { body: reply }
-      },
-      {
-        headers: { Authorization: `Bearer ${ACCESS_TOKEN}` }
-      }
-    );
-
-    // 👉 HERE YOU WILL CALL VISION AI NEXT STEP
-    console.log("READY FOR VISION:", imageData.imageId);
-
-    return res.sendStatus(200);
-  }
 }
-
     // ================= NORMAL AI =================
 
-    await saveMessage(from, "user", text);
+   await saveMessage(from, "user", text);
 
-    const reply = await getAIReply(text, from);
+const reply = await getAIReply(text, from);
 
-    await saveMessage(from, "assistant", reply);
+await saveMessage(from, "assistant", reply);
 
-    await axios.post(
-      `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
-      {
+await axios.post(
+    `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
+    {
         messaging_product: "whatsapp",
         to: from,
         text: { body: reply }
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${ACCESS_TOKEN}`
-        }
-      }
-    );
+    },
+    {
+        headers: { Authorization: `Bearer ${ACCESS_TOKEN}` }
+    }
+);
 
-    return res.sendStatus(200);}
+return res.sendStatus(200);
 
   } catch (err) {
     console.log("ERROR:", err.message);
