@@ -18,6 +18,7 @@ console.log("SUPABASE_KEY =", process.env.SUPABASE_KEY ? "FOUND" : "MISSING");
 // ─── Supabase ────────────────────────────────────────────────────────────────
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 
+// ── Conversations ─────────────────────────────────────────────────────────────
 async function saveMessage(phone, role, content) {
   const { error } = await supabase.from("conversations").insert([{ phone, role, content }]);
   if (error) console.error("Supabase save error:", error);
@@ -29,9 +30,118 @@ async function getHistory(phone) {
     .select("role, content")
     .eq("phone", phone)
     .order("created_at", { ascending: true })
-    .limit(20);
+    .limit(30);                          // 🔼 increased from 20 → 30
   if (error) { console.error("History error:", error); return []; }
   return data || [];
+}
+
+// ── User Profile (permanent memory) ──────────────────────────────────────────
+async function getUserProfile(phone) {
+  const { data } = await supabase
+    .from("user_profiles")
+    .select("*")
+    .eq("phone", phone)
+    .single();
+  return data || {};
+}
+
+async function saveUserProfile(phone, updates) {
+  const { error } = await supabase
+    .from("user_profiles")
+    .upsert({ phone, ...updates, updated_at: new Date().toISOString() });
+  if (error) console.error("Profile save error:", error);
+}
+
+// ── Auto-summarize old history to keep context compact ────────────────────────
+async function summarizeAndCompress(phone) {
+  const { data: rows } = await supabase
+    .from("conversations")
+    .select("id, role, content")
+    .eq("phone", phone)
+    .order("created_at", { ascending: true });
+
+  if (!rows || rows.length < 50) return; // only compress when history is large
+
+  // Build summary prompt from all messages
+  const convo = rows.map(r => `${r.role}: ${r.content}`).join("\n");
+  const summaryPrompt = `Summarize this WhatsApp conversation history into bullet points.
+Extract and keep:
+- User's name (if mentioned)
+- User's language preference
+- Topics and questions they asked about
+- Devices, products, or things they are interested in
+- Any personal preferences or facts they shared
+
+Conversation:
+${convo}`;
+
+  try {
+    const res = await axios.post(
+      "https://openrouter.ai/api/v1/chat/completions",
+      {
+        model: MODEL,
+        messages: [{ role: "user", content: summaryPrompt }]
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+          "Content-Type": "application/json"
+        }
+      }
+    );
+    const summary = res.data.choices[0].message.content;
+
+    // Save summary to user profile
+    await saveUserProfile(phone, { summary });
+
+    // Delete old messages, keep only last 15
+    const toDelete = rows.slice(0, rows.length - 15).map(r => r.id);
+    if (toDelete.length > 0) {
+      await supabase.from("conversations").delete().in("id", toDelete);
+    }
+
+    console.log(`✅ Compressed history for ${phone}`);
+  } catch (err) {
+    console.error("Summarize error:", err.message);
+  }
+}
+
+// ── Auto-extract user info from their message ─────────────────────────────────
+async function learnFromMessage(phone, text) {
+  const profile = await getUserProfile(phone);
+  const updates = {};
+
+  // Detect name
+  const nameMatch = text.match(/(?:my name is|i am|call me|iam|myself)\s+([A-Za-z]+)/i);
+  if (nameMatch && !profile.name) {
+    updates.name = nameMatch[1];
+    console.log(`👤 Learned name: ${nameMatch[1]}`);
+  }
+
+  // Detect language from keywords
+  const langMap = {
+    tamil: "Tamil", hindi: "Hindi", arabic: "Arabic",
+    telugu: "Telugu", kannada: "Kannada", malayalam: "Malayalam",
+    french: "French", spanish: "Spanish", german: "German"
+  };
+  for (const [key, lang] of Object.entries(langMap)) {
+    if (text.toLowerCase().includes(`in ${key}`) || text.toLowerCase().includes(`speak ${key}`)) {
+      updates.language = lang;
+    }
+  }
+
+  // Detect topics of interest and save to preferences
+  const interests = profile.preferences || {};
+  const topicMatch = text.match(/i (?:love|like|enjoy|am interested in|use|own|have)(?: a| an| the)? (.+)/i);
+  if (topicMatch) {
+    const topic = topicMatch[1].trim();
+    interests[topic] = true;
+    updates.preferences = interests;
+  }
+
+  if (Object.keys(updates).length > 0) {
+    await saveUserProfile(phone, updates);
+  }
 }
 
 // ─── WhatsApp Helpers ─────────────────────────────────────────────────────────
@@ -126,99 +236,65 @@ async function getWeather(city) {
   }
 }
 
-// ─── Web Search (via Google Custom Search) ────────────────────────────────────
+// ─── Web Search ───────────────────────────────────────────────────────────────
 async function webSearch(query) {
   try {
     const res = await axios.get(`https://www.googleapis.com/customsearch/v1`, {
-      params: {
-        key: process.env.GOOGLE_SEARCH_API_KEY,
-        cx: process.env.GOOGLE_SEARCH_CX,
-        q: query,
-        num: 3
-      }
+      params: { key: process.env.GOOGLE_SEARCH_API_KEY, cx: process.env.GOOGLE_SEARCH_CX, q: query, num: 3 }
     });
     const items = res.data.items || [];
     if (!items.length) return `😔 No results found for *${query}*.`;
-
     let msg = `🔎 *Search results for: ${query}*\n\n`;
-    items.forEach((item, i) => {
-      msg += `*${i + 1}. ${item.title}*\n${item.snippet}\n🔗 ${item.link}\n\n`;
-    });
+    items.forEach((item, i) => { msg += `*${i + 1}. ${item.title}*\n${item.snippet}\n🔗 ${item.link}\n\n`; });
     return msg.trim();
   } catch (err) {
     console.error("Web search error:", err.message);
-    // Fallback: Google search link
     return `🔎 Search this on Google:\nhttps://www.google.com/search?q=${encodeURIComponent(query)}`;
   }
 }
 
-// ─── Voice Transcription (Whisper via OpenRouter) ────────────────────────────
+// ─── Voice Transcription ──────────────────────────────────────────────────────
 async function transcribeAudio(audioBuffer) {
   try {
     const form = new FormData();
     form.append("file", audioBuffer, { filename: "audio.ogg", contentType: "audio/ogg" });
     form.append("model", "whisper-1");
-
     const res = await axios.post("https://api.openai.com/v1/audio/transcriptions", form, {
-      headers: {
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-        ...form.getHeaders()
-      }
+      headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, ...form.getHeaders() }
     });
     return res.data.text || null;
-  } catch (err) {
-    console.error("Transcription error:", err.message);
-    return null;
-  }
+  } catch (err) { console.error("Transcription error:", err.message); return null; }
 }
 
 // ─── Currency Converter ───────────────────────────────────────────────────────
 async function convertCurrency(amount, from, to) {
   try {
-    const res = await axios.get(
-      `https://api.exchangerate-api.com/v4/latest/${from.toUpperCase()}`
-    );
+    const res = await axios.get(`https://api.exchangerate-api.com/v4/latest/${from.toUpperCase()}`);
     const rate = res.data.rates[to.toUpperCase()];
     if (!rate) return `😔 Could not find exchange rate for ${from} → ${to}.`;
     const result = (amount * rate).toFixed(2);
     return `💱 *Currency Conversion*\n\n${amount} ${from.toUpperCase()} = *${result} ${to.toUpperCase()}*\n\n📅 Rate updated: ${res.data.date}`;
-  } catch (err) {
-    console.error("Currency error:", err.message);
-    return `😔 Currency conversion failed. Try again later.`;
-  }
+  } catch (err) { console.error("Currency error:", err.message); return `😔 Currency conversion failed.`; }
 }
 
 // ─── News ─────────────────────────────────────────────────────────────────────
 async function getNews(topic = "world") {
   try {
     const res = await axios.get(`https://newsapi.org/v2/top-headlines`, {
-      params: {
-        apiKey: process.env.NEWS_API_KEY,
-        q: topic === "world" ? undefined : topic,
-        language: "en",
-        pageSize: 4,
-        country: topic === "world" ? "us" : undefined
-      }
+      params: { apiKey: process.env.NEWS_API_KEY, q: topic === "world" ? undefined : topic, language: "en", pageSize: 4, country: topic === "world" ? "us" : undefined }
     });
     const articles = res.data.articles || [];
     if (!articles.length) return `😔 No news found for *${topic}*.`;
-
     let msg = `📰 *Latest News: ${topic.toUpperCase()}*\n\n`;
-    articles.forEach((a, i) => {
-      msg += `*${i + 1}. ${a.title}*\n${a.description || ""}\n🔗 ${a.url}\n\n`;
-    });
+    articles.forEach((a, i) => { msg += `*${i + 1}. ${a.title}*\n${a.description || ""}\n🔗 ${a.url}\n\n`; });
     return msg.trim();
-  } catch (err) {
-    console.error("News error:", err.message);
-    return `😔 Could not fetch news right now.`;
-  }
+  } catch (err) { console.error("News error:", err.message); return `😔 Could not fetch news right now.`; }
 }
 
 // ─── Intent Detector ──────────────────────────────────────────────────────────
 function detectIntent(text) {
   const t = text.trim();
 
-  // IMAGE
   const imageP = [
     /(?:send|show|give|get)(?: me)?(?: an?)? (?:image|photo|picture|pic) (?:of|about) (.+)/i,
     /(?:image|photo|picture|pic) of (.+)/i,
@@ -226,7 +302,6 @@ function detectIntent(text) {
   ];
   for (const p of imageP) { const m = t.match(p); if (m) return { type: "IMAGE", topic: m[m.length - 1].trim() }; }
 
-  // VIDEO
   const videoP = [
     /(?:send|show|give|get|find)(?: me)?(?: a| an| some)?(?: 4k| hd| full hd)? (?:video|clip|footage) (?:of|about|on) (.+)/i,
     /(?:send|show|give|get|find)(?: me)?(?: a| an)? (.+) (?:4k |hd |)?(?:video|clip|footage)/i,
@@ -236,7 +311,6 @@ function detectIntent(text) {
   ];
   for (const p of videoP) { const m = t.match(p); if (m) return { type: "VIDEO", topic: m[m.length - 1].trim() }; }
 
-  // YOUTUBE
   const ytP = [
     /(?:find|search|show)(?: me)? (?:a |an )?youtube (?:video )?(?:of|about|on) (.+)/i,
     /youtube (.+)/i,
@@ -244,7 +318,6 @@ function detectIntent(text) {
   ];
   for (const p of ytP) { const m = t.match(p); if (m) return { type: "YOUTUBE", topic: m[m.length - 1].trim() }; }
 
-  // WEATHER
   const weatherP = [
     /(?:weather|temperature|climate)(?: in| at| for)? (.+)/i,
     /(?:what(?:'s| is) the weather)(?: in| at| for)? (.+)/i,
@@ -252,66 +325,82 @@ function detectIntent(text) {
   ];
   for (const p of weatherP) { const m = t.match(p); if (m) return { type: "WEATHER", topic: m[m.length - 1].trim() }; }
 
-  // NEWS
   const newsP = [
     /(?:latest|today'?s?|recent|breaking)? ?news(?: on| about| for)? ?(.+)?/i,
     /what(?:'s| is) happening(?: in| with)? ?(.+)?/i,
   ];
-  for (const p of newsP) {
-    const m = t.match(p);
-    if (m) return { type: "NEWS", topic: (m[1] || "world").trim() };
-  }
+  for (const p of newsP) { const m = t.match(p); if (m) return { type: "NEWS", topic: (m[1] || "world").trim() }; }
 
-  // SEARCH / GOOGLE
   const searchP = [
     /(?:search|google|look up|find info|find out)(?: about| for)? (.+)/i,
-    /(?:what is|what are|who is|who are|how to|how do|explain) (.+)/i,
   ];
   for (const p of searchP) { const m = t.match(p); if (m) return { type: "SEARCH", topic: m[m.length - 1].trim() }; }
 
-  // CURRENCY
   const currP = [
     /(?:convert|how much is) (\d+(?:\.\d+)?) ?([a-z]{3}) (?:to|in) ([a-z]{3})/i,
     /(\d+(?:\.\d+)?) ?([a-z]{3}) to ([a-z]{3})/i,
   ];
-  for (const p of currP) {
-    const m = t.match(p);
-    if (m) return { type: "CURRENCY", amount: parseFloat(m[1]), from: m[2], to: m[3] };
-  }
+  for (const p of currP) { const m = t.match(p); if (m) return { type: "CURRENCY", amount: parseFloat(m[1]), from: m[2], to: m[3] }; }
 
   return null;
 }
 
-// ─── AI Core ──────────────────────────────────────────────────────────────────
+// ─── AI Core with FULL MEMORY ─────────────────────────────────────────────────
 const MODEL = "meta-llama/llama-3.2-11b-vision-instruct";
 
 const SYSTEM_PROMPT = `You are a smart, helpful WhatsApp AI assistant — like Claude or ChatGPT.
 You can do everything: answer questions, write code, translate, summarize, explain concepts, do math, tell jokes, write essays, poems, stories, and more.
 
-Rules:
-- Keep replies concise and friendly for WhatsApp chat.
-- Use *bold* with asterisks for emphasis (WhatsApp markdown).
-- Use bullet points only when listing steps or options.
-- Detect the user's language and reply in the SAME language automatically.
-- If user writes in Tamil → reply in Tamil. Hindi → Hindi. Arabic → Arabic. etc.
-- Do NOT assume the user's name unless they tell you.
+CRITICAL MEMORY RULES:
+- You have access to the user's LONG TERM MEMORY and full conversation history.
+- ALWAYS read the history before replying. Use it to understand follow-up messages.
+- If user sends a short follow-up like "under 20k", "best one", "which is cheapest", "compare first two", "tell me more", "what about the second one" — it ALWAYS relates to the PREVIOUS topic in history. NEVER ask "what do you mean?". Just connect it and answer.
+- If you already know the user's name, greet them personally.
+- Remember what topics, products, devices the user has discussed before.
+- If user previously asked about mobiles → "under 20k" means filter that mobile list.
+- If user previously asked about recipes → "without onion" means modify that recipe.
 
-If user asks for image/photo → reply: IMAGE_REQUEST:<topic>
-If user asks for video → reply: VIDEO_REQUEST:<topic>
-If user asks for youtube → reply: YOUTUBE_REQUEST:<topic>
-If user asks for weather → reply: WEATHER_REQUEST:<city>
-If user asks for news → reply: NEWS_REQUEST:<topic>
-If user asks to search/google something → reply: SEARCH_REQUEST:<query>
-If user asks to convert currency → reply: CURRENCY_REQUEST:<amount>:<from>:<to>`;
+LANGUAGE RULES:
+- Detect the user's language and ALWAYS reply in the SAME language.
+- Tamil → Tamil. Hindi → Hindi. English → English. etc.
+
+FORMAT RULES:
+- Keep replies concise and friendly for WhatsApp chat.
+- Use *bold* with asterisks for WhatsApp emphasis.
+- Use bullet points only when listing steps or options.
+- Do NOT use markdown headers (#, ##).
+
+INTENT RULES (reply ONLY with these codes, nothing else):
+If user asks for image/photo → IMAGE_REQUEST:<topic>
+If user asks for video → VIDEO_REQUEST:<topic>
+If user asks for youtube → YOUTUBE_REQUEST:<topic>
+If user asks for weather → WEATHER_REQUEST:<city>
+If user asks for news → NEWS_REQUEST:<topic>
+If user asks to search/google → SEARCH_REQUEST:<query>
+If user asks to convert currency → CURRENCY_REQUEST:<amount>:<from>:<to>`;
 
 async function getAIReply(userMessage, phone) {
   try {
-    const history = await getHistory(phone);
+    const [history, profile] = await Promise.all([
+      phone ? getHistory(phone) : Promise.resolve([]),
+      phone ? getUserProfile(phone) : Promise.resolve({})
+    ]);
+
+    // Build long-term memory block
+    let memoryBlock = "";
+    if (profile.name)     memoryBlock += `\n👤 User's name: ${profile.name}`;
+    if (profile.language) memoryBlock += `\n🌍 Always reply in: ${profile.language}`;
+    if (profile.summary)  memoryBlock += `\n\n📌 LONG TERM MEMORY (past conversations summary):\n${profile.summary}`;
+    if (profile.preferences && Object.keys(profile.preferences).length > 0) {
+      memoryBlock += `\n💡 User interests/preferences: ${Object.keys(profile.preferences).join(", ")}`;
+    }
+
     const messages = [
-      { role: "system", content: SYSTEM_PROMPT },
+      { role: "system", content: SYSTEM_PROMPT + (memoryBlock ? `\n\n---\nUSER PROFILE:${memoryBlock}` : "") },
       ...history,
       { role: "user", content: userMessage }
     ];
+
     const res = await axios.post(
       "https://openrouter.ai/api/v1/chat/completions",
       { model: MODEL, messages },
@@ -324,6 +413,7 @@ async function getAIReply(userMessage, phone) {
         }
       }
     );
+
     return res.data.choices[0].message.content;
   } catch (err) {
     console.error("AI ERROR:", JSON.stringify(err.response?.data) || err.message);
@@ -342,13 +432,10 @@ async function analyzeImageWithAI(base64Image, mimeType, userPrompt) {
         model: MODEL,
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
-          {
-            role: "user",
-            content: [
-              { type: "text", text: prompt },
-              { type: "image_url", image_url: { url: `data:${mimeType};base64,${base64Image}` } }
-            ]
-          }
+          { role: "user", content: [
+            { type: "text", text: prompt },
+            { type: "image_url", image_url: { url: `data:${mimeType};base64,${base64Image}` } }
+          ]}
         ]
       },
       {
@@ -367,14 +454,14 @@ async function analyzeImageWithAI(base64Image, mimeType, userPrompt) {
   }
 }
 
-// ─── AI Intent Parser (fallback) ─────────────────────────────────────────────
+// ─── AI Intent Parser ─────────────────────────────────────────────────────────
 async function parseAIIntent(reply) {
   if (reply.startsWith("IMAGE_REQUEST:"))    return { type: "IMAGE",    topic: reply.replace("IMAGE_REQUEST:", "").trim() };
   if (reply.startsWith("VIDEO_REQUEST:"))    return { type: "VIDEO",    topic: reply.replace("VIDEO_REQUEST:", "").trim() };
-  if (reply.startsWith("YOUTUBE_REQUEST:")) return { type: "YOUTUBE",  topic: reply.replace("YOUTUBE_REQUEST:", "").trim() };
-  if (reply.startsWith("WEATHER_REQUEST:")) return { type: "WEATHER",  topic: reply.replace("WEATHER_REQUEST:", "").trim() };
-  if (reply.startsWith("NEWS_REQUEST:"))    return { type: "NEWS",     topic: reply.replace("NEWS_REQUEST:", "").trim() };
-  if (reply.startsWith("SEARCH_REQUEST:"))  return { type: "SEARCH",   topic: reply.replace("SEARCH_REQUEST:", "").trim() };
+  if (reply.startsWith("YOUTUBE_REQUEST:"))  return { type: "YOUTUBE",  topic: reply.replace("YOUTUBE_REQUEST:", "").trim() };
+  if (reply.startsWith("WEATHER_REQUEST:"))  return { type: "WEATHER",  topic: reply.replace("WEATHER_REQUEST:", "").trim() };
+  if (reply.startsWith("NEWS_REQUEST:"))     return { type: "NEWS",     topic: reply.replace("NEWS_REQUEST:", "").trim() };
+  if (reply.startsWith("SEARCH_REQUEST:"))   return { type: "SEARCH",   topic: reply.replace("SEARCH_REQUEST:", "").trim() };
   if (reply.startsWith("CURRENCY_REQUEST:")) {
     const [amount, from, to] = reply.replace("CURRENCY_REQUEST:", "").trim().split(":");
     return { type: "CURRENCY", amount: parseFloat(amount), from, to };
@@ -414,10 +501,7 @@ async function handleYouTube(from, topic) {
   await sendText(from, `▶️ Searching YouTube for *${topic}*...`);
   if (process.env.YOUTUBE_API_KEY) {
     const result = await searchYouTube(topic);
-    if (result) {
-      await sendText(from, `▶️ *${result.title}*\n\n🔗 ${result.url}`);
-      return;
-    }
+    if (result) { await sendText(from, `▶️ *${result.title}*\n\n🔗 ${result.url}`); return; }
   }
   await sendText(from, `🔗 Search on YouTube:\nhttps://www.youtube.com/results?search_query=${encodeURIComponent(topic)}`);
 }
@@ -469,7 +553,7 @@ async function handleVoice(from, audioBuffer) {
   await sendText(from, "🎙️ Transcribing your voice message...");
   const transcript = await transcribeAudio(audioBuffer);
   if (!transcript) {
-    await sendText(from, "😔 Could not transcribe the audio. Please try again or type your message.");
+    await sendText(from, "😔 Could not transcribe the audio. Please type your message.");
     return;
   }
   await sendText(from, `📝 *You said:*\n${transcript}`);
@@ -539,7 +623,7 @@ app.post("/webhook", async (req, res) => {
         const audioBuffer = await downloadMedia(mediaUrl);
         await handleVoice(from, audioBuffer);
       } else {
-        await sendText(from, "🎙️ Voice messages are not enabled yet. Please type your message!");
+        await sendText(from, "🎙️ Voice messages not enabled yet. Please type your message!");
       }
       return res.sendStatus(200);
     }
@@ -560,11 +644,14 @@ app.post("/webhook", async (req, res) => {
       return res.sendStatus(200);
     }
 
-    // Intent detection (pattern match first — faster)
+    // 🧠 Learn from every message (non-blocking)
+    learnFromMessage(from, text).catch(console.error);
+
+    // Intent detection (pattern match first — faster & more reliable)
     const intent = detectIntent(text);
     if (await routeIntent(from, intent)) return res.sendStatus(200);
 
-    // AI reply
+    // AI reply with full memory
     await saveMessage(from, "user", text);
     const reply = await getAIReply(text, from);
     await saveMessage(from, "assistant", reply);
@@ -574,6 +661,10 @@ app.post("/webhook", async (req, res) => {
     if (await routeIntent(from, aiIntent)) return res.sendStatus(200);
 
     await sendText(from, reply);
+
+    // 🗜️ Auto compress old history (non-blocking)
+    summarizeAndCompress(from).catch(console.error);
+
     return res.sendStatus(200);
 
   } catch (err) {
